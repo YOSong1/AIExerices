@@ -9,7 +9,7 @@
 int main(void) 
 {
     SHealth shealth;
-    shealth.CalculateBmi("shealth.dat");
+    shealth.CalculateBmi("data/shealth.dat");
 
     return 0;
 }

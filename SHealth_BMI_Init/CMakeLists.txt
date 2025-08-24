@@ -1,36 +1,46 @@
 cmake_minimum_required(VERSION 3.8)
 
-set(PROJECT shealthlib)
-set(SOURCES
-    SHealth.cpp
-    SHealth.h
-)
-add_library(${PROJECT} STATIC ${SOURCES})
+project(shealth)
 
-project(${PROJECT})
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(PROJECT shealth)
-set(SOURCES
-    main.cpp
+add_library(shealthlib STATIC
+    src/SHealth.cpp
+    src/SHealth.h
 )
-add_executable(${PROJECT} ${SOURCES})
-target_link_libraries(${PROJECT}
+target_include_directories(shealthlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_executable(shealth
+    src/main.cpp
+)
+target_link_libraries(shealth
     PUBLIC
-    shealthlib
+        shealthlib
 )
 
-set(PROJECT shealth_test)
-set(SOURCES
-    SHealthTest.cpp
+# Fetch GoogleTest if not available
+include(FetchContent)
+FetchContent_Declare(
+    googletest
+    URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
 )
-add_executable(${PROJECT} ${SOURCES})
-target_link_libraries(${PROJECT}
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
+enable_testing()
+add_executable(shealth_test
+    test/SHealthTest.cpp
+)
+target_link_libraries(shealth_test
     PUBLIC
-        gtest
-        gtest_main
+        GTest::gtest_main
         shealthlib
 )
 add_test(
-    NAME ${PROJECT}
-    COMMAND ${PROJECT}
+    NAME shealth_test
+    COMMAND shealth_test
 )
+
+# Copy data directory to the build output to allow runtime access to data/shealth.dat
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
