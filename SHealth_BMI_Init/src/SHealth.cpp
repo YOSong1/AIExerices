@@ -66,11 +66,11 @@ namespace {
     constexpr double BMI_NORMAL_UPPER = 23.0;
     constexpr double BMI_OVERWEIGHT_UPPER = 25.0;
     
-    // 타입 코드 상수
-    constexpr int TYPE_UNDERWEIGHT = 100;
-    constexpr int TYPE_NORMAL = 200;
-    constexpr int TYPE_OVERWEIGHT = 300;
-    constexpr int TYPE_OBESITY = 400;
+    // 레거시 타입 코드 상수 (기존 호환성 유지)
+    constexpr int TYPE_UNDERWEIGHT = static_cast<int>(BmiType::Underweight);
+    constexpr int TYPE_NORMAL = static_cast<int>(BmiType::Normal);
+    constexpr int TYPE_OVERWEIGHT = static_cast<int>(BmiType::Overweight);
+    constexpr int TYPE_OBESITY = static_cast<int>(BmiType::Obesity);
 }
 
 
@@ -137,18 +137,24 @@ double SHealth::GetBmiRatio(int age_class, int type) const
     }
 }
 
+// 개선된 인터페이스 (BmiType enum 사용)
+double SHealth::GetBmiRatio(int age_class, BmiType type) const
+{
+    return GetBmiRatio(age_class, static_cast<int>(type));
+}
+
 int SHealth::GetAgeBucket(int age) const
 {
-    // 20대~70대를 10년 단위로 구분
-    if (age < 20) return 20;
-    if (age >= 80) return 70;
-    return (age / 10) * 10;
+    // 연령대를 10년 단위로 구분
+    if (age < MIN_AGE_GROUP) return MIN_AGE_GROUP;
+    if (age >= MAX_AGE_GROUP + AGE_GROUP_SPAN) return MAX_AGE_GROUP;
+    return (age / AGE_GROUP_SPAN) * AGE_GROUP_SPAN;
 }
 
 void SHealth::ImputeMissingWeights()
 {
     // 데이터 수집 중 누락된 체중에 나이대(ex. 20대, 30대, 40대 등)의 평균 체중을 적용
-    for (int a = 20; a <= 70; a += 10)
+    for (int ageGroup : AGE_GROUPS)
     {
         double sum = 0;
         int age_count = 0;
@@ -156,7 +162,7 @@ void SHealth::ImputeMissingWeights()
         // 해당 연령대의 유효한 체중 데이터 수집
         for (const auto& record : records) 
         {
-            if (record.age >= a && record.age < a + 10)
+            if (record.age >= ageGroup && record.age < ageGroup + AGE_GROUP_SPAN)
             {
                 if (record.weight > 0.0) {
                     sum += record.weight;
@@ -170,7 +176,7 @@ void SHealth::ImputeMissingWeights()
             double average_weight = sum / age_count;
             for (auto& record : records) 
             {
-                if (record.age >= a && record.age < a + 10)
+                if (record.age >= ageGroup && record.age < ageGroup + AGE_GROUP_SPAN)
                 {
                     if (record.weight == 0.0) {
                         record.weight = average_weight;
@@ -195,7 +201,7 @@ void SHealth::CalculateAgeGroupRatios()
     // 나이대(ex. 20대, 30대, 40대 등)의 BMI기준 저체중, 정상체중, 과체중, 비만 비율 계산
     ageGroupRatios.clear();
     
-    for (int a = 20; a <= 70; a += 10)
+    for (int ageGroup : AGE_GROUPS)
     {
         int underweight = 0;
         int normalweight = 0;
@@ -205,7 +211,7 @@ void SHealth::CalculateAgeGroupRatios()
         
         for (const auto& record : records)
         {
-            if (record.age >= a && record.age < a + 10)
+            if (record.age >= ageGroup && record.age < ageGroup + AGE_GROUP_SPAN)
             {
                 sum++;
                 // 기존 로직 유지 (25.0은 어떤 카테고리에도 포함되지 않음)
@@ -226,6 +232,6 @@ void SHealth::CalculateAgeGroupRatios()
         }
         // sum이 0인 경우 ratios는 기본값(0.0)으로 초기화됨
         
-        ageGroupRatios[a] = ratios;
+        ageGroupRatios[ageGroup] = ratios;
     }
 }

@@ -4,6 +4,21 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <array>
+
+// BMI 분류 타입
+enum class BmiType {
+    Underweight = 100,
+    Normal = 200,
+    Overweight = 300,
+    Obesity = 400
+};
+
+// 연령대 상수
+constexpr std::array<int, 6> AGE_GROUPS = {20, 30, 40, 50, 60, 70};
+constexpr int MIN_AGE_GROUP = 20;
+constexpr int MAX_AGE_GROUP = 70;
+constexpr int AGE_GROUP_SPAN = 10;
 
 struct BmiRatios {
     double underweight;
@@ -37,7 +52,8 @@ private:
 
 public:
     int CalculateBmi(std::string filename);
-    double GetBmiRatio(int age_class, int type) const;
+    double GetBmiRatio(int age_class, int type) const;  // 기존 호환성 유지
+    double GetBmiRatio(int age_class, BmiType type) const;  // 개선된 인터페이스
 };
 
 #endif
