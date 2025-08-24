@@ -54,3 +54,7 @@ Makefile
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# ApprovalTests artifacts
+*.received.*
+*.received

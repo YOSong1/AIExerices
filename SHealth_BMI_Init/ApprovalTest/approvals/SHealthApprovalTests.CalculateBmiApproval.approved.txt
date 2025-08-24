@@ -1,0 +1,6 @@
+BMI Ratios for 20s (%)
+Underweight: 25.0
+Normal: 25.0
+Overweight: 25.0
+Obesity: 25.0
+

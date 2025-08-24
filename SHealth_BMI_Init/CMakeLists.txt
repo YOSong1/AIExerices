@@ -28,6 +28,14 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+# Fetch ApprovalTests
+FetchContent_Declare(
+    ApprovalTests
+    GIT_REPOSITORY https://github.com/approvals/ApprovalTests.cpp.git
+    GIT_TAG v.10.12.0
+)
+FetchContent_MakeAvailable(ApprovalTests)
+
 enable_testing()
 add_executable(shealth_test
     test/SHealthTest.cpp
@@ -42,5 +50,23 @@ add_test(
     COMMAND shealth_test
 )
 
+# ApprovalTests + GoogleTest executable
+add_executable(shealth_approval_tests
+    ApprovalTest/SHealthApprovalTests.cpp
+)
+target_link_libraries(shealth_approval_tests
+    PUBLIC
+        shealthlib
+        GTest::gtest_main
+        ApprovalTests::ApprovalTests
+)
+add_test(
+    NAME shealth_approval_tests
+    COMMAND shealth_approval_tests
+)
+
 # Copy data directory to the build output to allow runtime access to data/shealth.dat
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/data DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+# Copy approvals directory so that approved files are found at test runtime
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/ApprovalTest/approvals DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
