@@ -112,118 +112,10 @@ int SHealth::CalculateBmi(std::string filename)
         records.emplace_back(age, validWeight, height);
     }
 
-    // 데이터 수집 중 누락된 체중에 나이대(ex. 20대, 30대, 40대 등)의 평균 체중을 적용
-    for (int a = 20; a <= 70; a += 10)
-    {
-        double sum = 0;
-        int age_count = 0;
-        for (auto& record : records) 
-        {
-            if (record.age >= a && record.age < a + 10)
-            {
-                if (record.weight > 0.0) { // 0.0 대신 > 0.0 사용
-                    sum += record.weight;
-                    age_count++;
-                }
-            }
-        }
-        
-        // 분모 0 방지
-        if (age_count > 0) {
-            double average_weight = sum / age_count;
-            for (auto& record : records) 
-            {
-                if (record.age >= a && record.age < a + 10)
-                {
-                    if (record.weight == 0.0) {
-                        record.weight = average_weight;
-                    }
-                }
-            }
-        }
-    }
-
-    // BMI 계산하기
-    for (auto& record : records)
-    {
-        record.bmi = record.weight / ((record.height / 100.0) * (record.height / 100.0));
-    }
-
-    // 나이대(ex. 20대, 30대, 40대 등)의 BMI기준 저체중, 정상체중, 과체중, 비만 비율 계산
-    for (int a = 20; a <= 70; a += 10)
-    {
-        int underweight = 0;
-        int normalweight = 0;
-        int overweight = 0;
-        int obesity = 0;
-        int sum = 0;
-        
-        for (const auto& record : records)
-        {
-            if (record.age >= a && record.age < a + 10)
-            {
-                sum++;
-                // 기존 로직 유지 (25.0은 어떤 카테고리에도 포함되지 않음)
-                if (record.bmi <= BMI_UNDERWEIGHT_THRESHOLD) underweight++;
-                if (record.bmi > BMI_UNDERWEIGHT_THRESHOLD && record.bmi < BMI_NORMAL_UPPER) normalweight++;
-                if (record.bmi >= BMI_NORMAL_UPPER && record.bmi < BMI_OVERWEIGHT_UPPER) overweight++;
-                if (record.bmi > BMI_OVERWEIGHT_UPPER) obesity++;
-            }
-        }
-        // 분모 0 방지
-        if (sum > 0) {
-            if (a == 20)
-            {
-                underweight20 = (double)underweight * 100 / sum;
-                normalweight20 = (double)normalweight * 100 / sum;
-                overweight20 = (double)overweight * 100 / sum;
-                obesity20 = (double)obesity * 100 / sum;
-            }
-            else if (a == 30)
-            {
-                underweight30 = (double)underweight * 100 / sum;
-                normalweight30 = (double)normalweight * 100 / sum;
-                overweight30 = (double)overweight * 100 / sum;
-                obesity30 = (double)obesity * 100 / sum;
-            }
-            else if (a == 40)
-            {
-                underweight40 = (double)underweight * 100 / sum;
-                normalweight40 = (double)normalweight * 100 / sum;
-                overweight40 = (double)overweight * 100 / sum;
-                obesity40 = (double)obesity * 100 / sum;
-            }
-            else if (a == 50)
-            {
-                underweight50 = (double)underweight * 100 / sum;
-                normalweight50 = (double)normalweight * 100 / sum;
-                overweight50 = (double)overweight * 100 / sum;
-                obesity50 = (double)obesity * 100 / sum;
-            }
-            else if (a == 60)
-            {
-                underweight60 = (double)underweight * 100 / sum;
-                normalweight60 = (double)normalweight * 100 / sum;
-                overweight60 = (double)overweight * 100 / sum;
-                obesity60 = (double)obesity * 100 / sum;
-            }
-            else if (a == 70)
-            {
-                underweight70 = (double)underweight * 100 / sum;
-                normalweight70 = (double)normalweight * 100 / sum;
-                overweight70 = (double)overweight * 100 / sum;
-                obesity70 = (double)obesity * 100 / sum;
-            }
-        } else {
-            // 해당 연령대에 데이터가 없을 경우 0으로 설정
-            if (a == 20) { underweight20 = normalweight20 = overweight20 = obesity20 = 0.0; }
-            else if (a == 30) { underweight30 = normalweight30 = overweight30 = obesity30 = 0.0; }
-            else if (a == 40) { underweight40 = normalweight40 = overweight40 = obesity40 = 0.0; }
-            else if (a == 50) { underweight50 = normalweight50 = overweight50 = obesity50 = 0.0; }
-            else if (a == 60) { underweight60 = normalweight60 = overweight60 = obesity60 = 0.0; }
-            else if (a == 70) { underweight70 = normalweight70 = overweight70 = obesity70 = 0.0; }
-        }
-    }
+    // 모듈화된 함수들로 처리 단계 분리
+    ImputeMissingWeights();
+    CalculateBmiValues();
+    CalculateAgeGroupRatios();
     return static_cast<int>(records.size());
 }
 
@@ -260,4 +152,137 @@ double SHealth::GetBmiRatio(int age_class, int type) const
     if (age_class == 70 && type == TYPE_OBESITY) return obesity70;
 
     return 0.0;
+}
+
+int SHealth::GetAgeBucket(int age) const
+{
+    // 20대~70대를 10년 단위로 구분
+    if (age < 20) return 20;
+    if (age >= 80) return 70;
+    return (age / 10) * 10;
+}
+
+void SHealth::ImputeMissingWeights()
+{
+    // 데이터 수집 중 누락된 체중에 나이대(ex. 20대, 30대, 40대 등)의 평균 체중을 적용
+    for (int a = 20; a <= 70; a += 10)
+    {
+        double sum = 0;
+        int age_count = 0;
+        
+        // 해당 연령대의 유효한 체중 데이터 수집
+        for (const auto& record : records) 
+        {
+            if (record.age >= a && record.age < a + 10)
+            {
+                if (record.weight > 0.0) {
+                    sum += record.weight;
+                    age_count++;
+                }
+            }
+        }
+        
+        // 분모 0 방지 및 평균 체중으로 누락 데이터 보간
+        if (age_count > 0) {
+            double average_weight = sum / age_count;
+            for (auto& record : records) 
+            {
+                if (record.age >= a && record.age < a + 10)
+                {
+                    if (record.weight == 0.0) {
+                        record.weight = average_weight;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void SHealth::CalculateBmiValues()
+{
+    // BMI 계산하기
+    for (auto& record : records)
+    {
+        record.bmi = record.weight / ((record.height / 100.0) * (record.height / 100.0));
+    }
+}
+
+void SHealth::CalculateAgeGroupRatios()
+{
+    // 나이대(ex. 20대, 30대, 40대 등)의 BMI기준 저체중, 정상체중, 과체중, 비만 비율 계산
+    for (int a = 20; a <= 70; a += 10)
+    {
+        int underweight = 0;
+        int normalweight = 0;
+        int overweight = 0;
+        int obesity = 0;
+        int sum = 0;
+        
+        for (const auto& record : records)
+        {
+            if (record.age >= a && record.age < a + 10)
+            {
+                sum++;
+                // 기존 로직 유지 (25.0은 어떤 카테고리에도 포함되지 않음)
+                if (record.bmi <= BMI_UNDERWEIGHT_THRESHOLD) underweight++;
+                else if (record.bmi < BMI_NORMAL_UPPER) normalweight++;
+                else if (record.bmi < BMI_OVERWEIGHT_UPPER) overweight++;
+                else if (record.bmi > BMI_OVERWEIGHT_UPPER) obesity++;
+            }
+        }
+        
+        // 분모 0 방지
+        if (sum > 0) {
+            double underweight_ratio = (double)underweight * 100 / sum;
+            double normalweight_ratio = (double)normalweight * 100 / sum;
+            double overweight_ratio = (double)overweight * 100 / sum;
+            double obesity_ratio = (double)obesity * 100 / sum;
+            
+            // 연령대별 비율 저장
+            if (a == 20) {
+                underweight20 = underweight_ratio;
+                normalweight20 = normalweight_ratio;
+                overweight20 = overweight_ratio;
+                obesity20 = obesity_ratio;
+            }
+            else if (a == 30) {
+                underweight30 = underweight_ratio;
+                normalweight30 = normalweight_ratio;
+                overweight30 = overweight_ratio;
+                obesity30 = obesity_ratio;
+            }
+            else if (a == 40) {
+                underweight40 = underweight_ratio;
+                normalweight40 = normalweight_ratio;
+                overweight40 = overweight_ratio;
+                obesity40 = obesity_ratio;
+            }
+            else if (a == 50) {
+                underweight50 = underweight_ratio;
+                normalweight50 = normalweight_ratio;
+                overweight50 = overweight_ratio;
+                obesity50 = obesity_ratio;
+            }
+            else if (a == 60) {
+                underweight60 = underweight_ratio;
+                normalweight60 = normalweight_ratio;
+                overweight60 = overweight_ratio;
+                obesity60 = obesity_ratio;
+            }
+            else if (a == 70) {
+                underweight70 = underweight_ratio;
+                normalweight70 = normalweight_ratio;
+                overweight70 = overweight_ratio;
+                obesity70 = obesity_ratio;
+            }
+        } else {
+            // 해당 연령대에 데이터가 없을 경우 0으로 설정
+            if (a == 20) { underweight20 = normalweight20 = overweight20 = obesity20 = 0.0; }
+            else if (a == 30) { underweight30 = normalweight30 = overweight30 = obesity30 = 0.0; }
+            else if (a == 40) { underweight40 = normalweight40 = overweight40 = obesity40 = 0.0; }
+            else if (a == 50) { underweight50 = normalweight50 = overweight50 = obesity50 = 0.0; }
+            else if (a == 60) { underweight60 = normalweight60 = overweight60 = obesity60 = 0.0; }
+            else if (a == 70) { underweight70 = normalweight70 = overweight70 = obesity70 = 0.0; }
+        }
+    }
 }

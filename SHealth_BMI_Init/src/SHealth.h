@@ -43,6 +43,12 @@ private:
     double obesity60;
     double obesity70;
 
+    // Helper functions
+    void ImputeMissingWeights();
+    void CalculateBmiValues();
+    void CalculateAgeGroupRatios();
+    int GetAgeBucket(int age) const;
+
 public:
     int CalculateBmi(std::string filename);
     double GetBmiRatio(int age_class, int type) const;
