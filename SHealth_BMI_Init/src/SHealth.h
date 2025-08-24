@@ -1,8 +1,8 @@
 #ifndef SHEALTH_H
 #define SHEALTH_H
-#include <cstring>
 
-using namespace std;
+#include <string>
+#include <vector>
 
 class SHealth {
 private:
@@ -37,11 +37,9 @@ private:
     double obesity60;
     double obesity70;
 
-    vector<string> Split(string line, char Delimiter);
-
 public:
-    int CalculateBmi(string filename);
-    double GetBmiRatio(int age_class, int type);
+    int CalculateBmi(std::string filename);
+    double GetBmiRatio(int age_class, int type) const;
 };
 
 #endif

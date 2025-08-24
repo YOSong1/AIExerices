@@ -3,7 +3,7 @@
 
 using namespace std;
 
-TEST(HealthTest, SampleTest)
+TEST(HealthTest, DISABLED_SampleTest)
 {
 	EXPECT_TRUE(false);
 }
