@@ -7,15 +7,58 @@
 #include "SHealth.h"
 
 namespace {
-    // Split 함수를 내부 함수로 이동
+    // 문자열 트리밍 함수
+    std::string Trim(const std::string& str) {
+        size_t first = str.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) return "";
+        size_t last = str.find_last_not_of(" \t\r\n");
+        return str.substr(first, (last - first + 1));
+    }
+    
+    // Split 함수를 내부 함수로 이동 (트리밍 추가)
     std::vector<std::string> Split(const std::string& line, char delimiter) 
     {
         std::istringstream iss(line);  
         std::string token;            
         std::vector<std::string> tokens;
-        while (std::getline(iss, token, delimiter))
-            tokens.push_back(token);
+        while (std::getline(iss, token, delimiter)) {
+            std::string trimmed = Trim(token);
+            tokens.push_back(trimmed);
+        }
         return tokens;
+    }
+    
+    // 안전한 정수 파싱
+    int SafeParseInt(const std::string& str, int defaultValue = 0) {
+        try {
+            if (str.empty()) return defaultValue;
+            return std::stoi(str);
+        } catch (const std::exception&) {
+            return defaultValue;
+        }
+    }
+    
+    // 안전한 실수 파싱
+    double SafeParseDouble(const std::string& str, double defaultValue = 0.0) {
+        try {
+            if (str.empty()) return defaultValue;
+            return std::stod(str);
+        } catch (const std::exception&) {
+            return defaultValue;
+        }
+    }
+    
+    // 데이터 유효성 검증
+    bool IsValidAge(int age) {
+        return age > 0 && age <= 150;
+    }
+    
+    bool IsValidWeight(double weight) {
+        return weight > 0.0 && weight <= 1000.0; // 현실적인 범위
+    }
+    
+    bool IsValidHeight(double height) {
+        return height > 0.0 && height <= 300.0; // 현실적인 범위 (cm)
     }
     
     // BMI 분류 상수
@@ -47,14 +90,27 @@ int SHealth::CalculateBmi(std::string filename)
     }
     
     while (std::getline(file, line) && count < 10000) {
-        if (line.empty()) continue; // 빈 라인 스킵
+        std::string trimmed_line = Trim(line);
+        if (trimmed_line.empty()) continue; // 빈 라인 스킵
         
-        std::vector<std::string> tokens = Split(line, ',');
+        // 주석 라인 스킵 (# 또는 // 로 시작)
+        if (trimmed_line[0] == '#' || trimmed_line.substr(0, 2) == "//") continue;
+        
+        std::vector<std::string> tokens = Split(trimmed_line, ',');
         if (tokens.size() < 4) continue; // 토큰 개수 검증
         
-        ages[count] = std::atoi(tokens[1].c_str());
-        weights[count] = std::atof(tokens[2].c_str());
-        heights[count] = std::atof(tokens[3].c_str());
+        // 안전한 파싱과 유효성 검증
+        int age = SafeParseInt(tokens[1]);
+        double weight = SafeParseDouble(tokens[2]);
+        double height = SafeParseDouble(tokens[3]);
+        
+        // 데이터 유효성 검증 (유효하지 않은 데이터는 건너뛰기)
+        if (!IsValidAge(age) || !IsValidHeight(height)) continue;
+        
+        // 체중이 0이거나 유효하지 않은 경우에도 일단 저장 (나중에 보간)
+        ages[count] = age;
+        weights[count] = IsValidWeight(weight) ? weight : 0.0;
+        heights[count] = height;
         count++;
     }
 
