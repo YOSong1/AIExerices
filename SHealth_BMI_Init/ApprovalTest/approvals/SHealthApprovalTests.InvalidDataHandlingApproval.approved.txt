@@ -1,0 +1,12 @@
+Valid records processed: 3
+BMI Ratios for 20s (%)
+Underweight: 0.0
+Normal: 0.0
+Overweight: 100.0
+Obesity: 0.0
+BMI Ratios for 30s (%)
+Underweight: 0.0
+Normal: 0.0
+Overweight: 100.0
+Obesity: 0.0
+

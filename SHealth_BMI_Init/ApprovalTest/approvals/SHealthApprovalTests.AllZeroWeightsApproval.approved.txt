@@ -1,0 +1,6 @@
+BMI Ratios for 20s (%) - All zero weights case
+Underweight: 100.0
+Normal: 0.0
+Overweight: 0.0
+Obesity: 0.0
+

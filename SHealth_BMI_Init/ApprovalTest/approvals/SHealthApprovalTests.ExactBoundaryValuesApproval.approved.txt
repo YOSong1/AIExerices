@@ -1,0 +1,7 @@
+Total records: 7
+BMI Ratios for 20s (%)
+Underweight: 14.3
+Normal: 28.6
+Overweight: 28.6
+Obesity: 14.3
+
