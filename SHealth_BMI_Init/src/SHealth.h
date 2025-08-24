@@ -4,13 +4,19 @@
 #include <string>
 #include <vector>
 
+struct HealthRecord {
+    int age;
+    double weight;
+    double height;
+    double bmi;
+    
+    HealthRecord() : age(0), weight(0.0), height(0.0), bmi(0.0) {}
+    HealthRecord(int a, double w, double h) : age(a), weight(w), height(h), bmi(0.0) {}
+};
+
 class SHealth {
 private:
-    int count;
-    int ages[10000];
-    double heights[10000];
-    double weights[10000];
-    double bmis[10000];
+    std::vector<HealthRecord> records;
 
     double underweight20;
     double underweight30;

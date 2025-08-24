@@ -77,7 +77,7 @@ namespace {
 
 int SHealth::CalculateBmi(std::string filename)
 {
-    count = 0;
+    records.clear();
     std::ifstream file(filename);
     if (!file.is_open()) {
         return 0; // 파일 열기 실패
@@ -89,7 +89,7 @@ int SHealth::CalculateBmi(std::string filename)
         // 첫 번째 라인은 헤더로 가정
     }
     
-    while (std::getline(file, line) && count < 10000) {
+    while (std::getline(file, line)) {
         std::string trimmed_line = Trim(line);
         if (trimmed_line.empty()) continue; // 빈 라인 스킵
         
@@ -108,10 +108,8 @@ int SHealth::CalculateBmi(std::string filename)
         if (!IsValidAge(age) || !IsValidHeight(height)) continue;
         
         // 체중이 0이거나 유효하지 않은 경우에도 일단 저장 (나중에 보간)
-        ages[count] = age;
-        weights[count] = IsValidWeight(weight) ? weight : 0.0;
-        heights[count] = height;
-        count++;
+        double validWeight = IsValidWeight(weight) ? weight : 0.0;
+        records.emplace_back(age, validWeight, height);
     }
 
     // 데이터 수집 중 누락된 체중에 나이대(ex. 20대, 30대, 40대 등)의 평균 체중을 적용
@@ -119,12 +117,12 @@ int SHealth::CalculateBmi(std::string filename)
     {
         double sum = 0;
         int age_count = 0;
-        for (int i = 0; i < count; i++) 
+        for (auto& record : records) 
         {
-            if (ages[i] >= a && ages[i] < a + 10)
+            if (record.age >= a && record.age < a + 10)
             {
-                if (weights[i] > 0.0) { // 0.0 대신 > 0.0 사용
-                    sum += weights[i];
+                if (record.weight > 0.0) { // 0.0 대신 > 0.0 사용
+                    sum += record.weight;
                     age_count++;
                 }
             }
@@ -133,12 +131,12 @@ int SHealth::CalculateBmi(std::string filename)
         // 분모 0 방지
         if (age_count > 0) {
             double average_weight = sum / age_count;
-            for (int i = 0; i < count; i++) 
+            for (auto& record : records) 
             {
-                if (ages[i] >= a && ages[i] < a + 10)
+                if (record.age >= a && record.age < a + 10)
                 {
-                    if (weights[i] == 0.0) {
-                        weights[i] = average_weight;
+                    if (record.weight == 0.0) {
+                        record.weight = average_weight;
                     }
                 }
             }
@@ -146,9 +144,9 @@ int SHealth::CalculateBmi(std::string filename)
     }
 
     // BMI 계산하기
-    for (int i = 0; i < count; i++)
+    for (auto& record : records)
     {
-        bmis[i] = weights[i] / ((heights[i] / 100.0) * (heights[i] / 100.0));
+        record.bmi = record.weight / ((record.height / 100.0) * (record.height / 100.0));
     }
 
     // 나이대(ex. 20대, 30대, 40대 등)의 BMI기준 저체중, 정상체중, 과체중, 비만 비율 계산
@@ -160,16 +158,16 @@ int SHealth::CalculateBmi(std::string filename)
         int obesity = 0;
         int sum = 0;
         
-        for (int i = 0; i < count; i++)
+        for (const auto& record : records)
         {
-            if (ages[i] >= a && ages[i] < a + 10)
+            if (record.age >= a && record.age < a + 10)
             {
                 sum++;
                 // 기존 로직 유지 (25.0은 어떤 카테고리에도 포함되지 않음)
-                if (bmis[i] <= BMI_UNDERWEIGHT_THRESHOLD) underweight++;
-                if (bmis[i] > BMI_UNDERWEIGHT_THRESHOLD && bmis[i] < BMI_NORMAL_UPPER) normalweight++;
-                if (bmis[i] >= BMI_NORMAL_UPPER && bmis[i] < BMI_OVERWEIGHT_UPPER) overweight++;
-                if (bmis[i] > BMI_OVERWEIGHT_UPPER) obesity++;
+                if (record.bmi <= BMI_UNDERWEIGHT_THRESHOLD) underweight++;
+                if (record.bmi > BMI_UNDERWEIGHT_THRESHOLD && record.bmi < BMI_NORMAL_UPPER) normalweight++;
+                if (record.bmi >= BMI_NORMAL_UPPER && record.bmi < BMI_OVERWEIGHT_UPPER) overweight++;
+                if (record.bmi > BMI_OVERWEIGHT_UPPER) obesity++;
             }
         }
         // 분모 0 방지
@@ -226,7 +224,7 @@ int SHealth::CalculateBmi(std::string filename)
             else if (a == 70) { underweight70 = normalweight70 = overweight70 = obesity70 = 0.0; }
         }
     }
-    return count;
+    return static_cast<int>(records.size());
 }
 
 double SHealth::GetBmiRatio(int age_class, int type) const
