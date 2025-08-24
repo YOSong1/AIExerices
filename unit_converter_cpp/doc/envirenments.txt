@@ -1,0 +1,27 @@
+# 현재 설치된 환경
+
+- 윈도우에 Cygwin 설치
+- gcov, gcovr 설치
+- googletest 설치
+
+# Code Coverage 사용법
+## 전제
+- GCC 또는 Clang 사용 (Cygwin 환경)
+- gcov, gcovr 설치됨
+
+## 커버리지 빌드 & 테스트
+```
+cmake -S . -B build-cov -G "Unix Makefiles" -DENABLE_CODE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-cov
+cd build-cov && ctest --output-on-failure
+```
+
+## 리포트 생성
+```
+cd build-cov
+gcovr -r .. --filter ../src --html-details -o coverage.html
+gcovr -r .. --filter ../src --xml-pretty -o coverage.xml
+```
+
+## 확인
+- build-cov/coverage.html 파일을 브라우저로 열어 커버리지 확인
