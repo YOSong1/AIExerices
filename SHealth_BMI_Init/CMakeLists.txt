@@ -5,11 +5,25 @@ project(shealth)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Coverage configuration
+option(ENABLE_COVERAGE "Enable coverage reporting" OFF)
+if(ENABLE_COVERAGE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage -fprofile-arcs -ftest-coverage")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage -fprofile-arcs -ftest-coverage")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+endif()
+
+# Main library
 add_library(shealthlib STATIC
     src/SHealth.cpp
     src/SHealth.h
 )
 target_include_directories(shealthlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# 테스트 빌드 시에만 필요한 매크로 정의 (현재는 불필요하지만 향후 확장성을 위해 유지)
+if(BUILD_TESTING)
+    target_compile_definitions(shealthlib PRIVATE ENABLE_TESTING)
+endif()
 
 add_executable(shealth
     src/main.cpp

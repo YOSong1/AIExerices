@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 #include <sstream>
+#include <stdexcept>
 #include "SHealth.h"
 
 namespace {
@@ -74,164 +75,217 @@ namespace {
 }
 
 
+// =============================================================================
+// 기본 구현체들 (Default Implementations)
+// =============================================================================
 
-int SHealth::CalculateBmi(std::string filename)
-{
-    records.clear();
+int StandardAgeBucketer::GetAgeBucket(int age) const {
+    if (age < MIN_AGE_GROUP) return MIN_AGE_GROUP;
+    if (age >= MAX_AGE_GROUP + AGE_GROUP_SPAN) return MAX_AGE_GROUP;
+    return (age / AGE_GROUP_SPAN) * AGE_GROUP_SPAN;
+}
+
+BmiType StandardBmiClassifier::ClassifyBmi(double bmi) const {
+    if (bmi <= BMI_UNDERWEIGHT_THRESHOLD) return BmiType::Underweight;
+    else if (bmi < BMI_NORMAL_UPPER) return BmiType::Normal;
+    else if (bmi < BMI_OVERWEIGHT_UPPER) return BmiType::Overweight;
+    else if (bmi > BMI_OVERWEIGHT_UPPER) return BmiType::Obesity;
+    else return BmiType::Normal; // BMI가 정확히 25.0인 경우 (기존 로직에서는 분류되지 않았지만 안전하게 처리)
+}
+
+double StandardBmiClassifier::CalculateBmi(double weight, double height) const {
+    if (height <= 0.0) return 0.0; // 안전한 처리
+    double heightInM = height / 100.0;
+    return weight / (heightInM * heightInM);
+}
+
+void AverageWeightImputer::ImputeMissingWeights(std::vector<HealthRecord>& records, const AgeBucketer& bucketer) const {
+    for (int ageGroup : AGE_GROUPS) {
+        double sum = 0;
+        int count = 0;
+        
+        // 해당 연령대의 유효한 체중 데이터 수집
+        for (const auto& record : records) {
+            if (bucketer.GetAgeBucket(record.age) == ageGroup && record.weight > 0.0) {
+                sum += record.weight;
+                count++;
+            }
+        }
+        
+        // 평균 체중으로 누락 데이터 보간
+        if (count > 0) {
+            double average_weight = sum / count;
+            for (auto& record : records) {
+                if (bucketer.GetAgeBucket(record.age) == ageGroup && record.weight == 0.0) {
+                    record.weight = average_weight;
+                }
+            }
+        }
+    }
+}
+
+std::vector<HealthRecord> CsvHealthDataLoader::LoadHealthData(const std::string& filename) const {
     std::ifstream file(filename);
     if (!file.is_open()) {
-        return 0; // 파일 열기 실패
+        return {}; // 빈 벡터 반환
     }
-    
+    return LoadHealthData(file);
+}
+
+std::vector<HealthRecord> CsvHealthDataLoader::LoadHealthData(std::istream& input) const {
+    std::vector<HealthRecord> records;
     std::string line;
+    
     // 헤더 라인 건너뛰기
-    if (std::getline(file, line)) {
+    if (std::getline(input, line)) {
         // 첫 번째 라인은 헤더로 가정
     }
     
-    while (std::getline(file, line)) {
+    while (std::getline(input, line)) {
         std::string trimmed_line = Trim(line);
-        if (trimmed_line.empty()) continue; // 빈 라인 스킵
+        if (trimmed_line.empty()) continue;
         
-        // 주석 라인 스킵 (# 또는 // 로 시작)
+        // 주석 라인 스킵
         if (trimmed_line[0] == '#' || trimmed_line.substr(0, 2) == "//") continue;
         
         std::vector<std::string> tokens = Split(trimmed_line, ',');
-        if (tokens.size() < 4) continue; // 토큰 개수 검증
+        if (tokens.size() < 4) continue;
         
         // 안전한 파싱과 유효성 검증
         int age = SafeParseInt(tokens[1]);
         double weight = SafeParseDouble(tokens[2]);
         double height = SafeParseDouble(tokens[3]);
         
-        // 데이터 유효성 검증 (유효하지 않은 데이터는 건너뛰기)
         if (!IsValidAge(age) || !IsValidHeight(height)) continue;
         
-        // 체중이 0이거나 유효하지 않은 경우에도 일단 저장 (나중에 보간)
         double validWeight = IsValidWeight(weight) ? weight : 0.0;
         records.emplace_back(age, validWeight, height);
     }
-
-    // 모듈화된 함수들로 처리 단계 분리
-    ImputeMissingWeights();
-    CalculateBmiValues();
-    CalculateAgeGroupRatios();
-    return static_cast<int>(records.size());
+    
+    return records;
 }
 
-double SHealth::GetBmiRatio(int age_class, int type) const
-{
+// =============================================================================
+// SHealthCore 구현
+// =============================================================================
+
+SHealthCore::SHealthCore() 
+    : ageBucketer(std::make_unique<StandardAgeBucketer>()),
+      bmiClassifier(std::make_unique<StandardBmiClassifier>()),
+      weightImputer(std::make_unique<AverageWeightImputer>()) {
+}
+
+SHealthCore::SHealthCore(std::unique_ptr<AgeBucketer> bucketer,
+                         std::unique_ptr<BmiClassifier> classifier,
+                         std::unique_ptr<WeightImputer> imputer)
+    : ageBucketer(std::move(bucketer)),
+      bmiClassifier(std::move(classifier)),
+      weightImputer(std::move(imputer)) {
+}
+
+void SHealthCore::ProcessHealthData(std::vector<HealthRecord>& records) {
+    // 1. 결측치 보간
+    weightImputer->ImputeMissingWeights(records, *ageBucketer);
+    
+    // 2. BMI 계산
+    for (auto& record : records) {
+        record.bmi = bmiClassifier->CalculateBmi(record.weight, record.height);
+    }
+    
+    // 3. 연령대별 비율 계산
+    ageGroupRatios.clear();
+    
+    for (int ageGroup : AGE_GROUPS) {
+        int underweight = 0, normal = 0, overweight = 0, obesity = 0, total = 0;
+        
+        for (const auto& record : records) {
+            if (ageBucketer->GetAgeBucket(record.age) == ageGroup) {
+                total++;
+                BmiType type = bmiClassifier->ClassifyBmi(record.bmi);
+                switch (type) {
+                    case BmiType::Underweight: underweight++; break;
+                    case BmiType::Normal: normal++; break;
+                    case BmiType::Overweight: overweight++; break;
+                    case BmiType::Obesity: obesity++; break;
+                }
+            }
+        }
+        
+        BmiRatios ratios;
+        if (total > 0) {
+            ratios.underweight = (double)underweight * 100 / total;
+            ratios.normal = (double)normal * 100 / total;
+            ratios.overweight = (double)overweight * 100 / total;
+            ratios.obesity = (double)obesity * 100 / total;
+        }
+        ageGroupRatios[ageGroup] = ratios;
+    }
+}
+
+double SHealthCore::GetBmiRatio(int age_class, BmiType type) const {
     auto it = ageGroupRatios.find(age_class);
     if (it == ageGroupRatios.end()) {
-        return 0.0; // 해당 연령대 데이터가 없음
+        return 0.0;
     }
     
     const BmiRatios& ratios = it->second;
-    
     switch (type) {
-        case TYPE_UNDERWEIGHT: return ratios.underweight;
-        case TYPE_NORMAL:      return ratios.normal;
-        case TYPE_OVERWEIGHT:  return ratios.overweight;
-        case TYPE_OBESITY:     return ratios.obesity;
-        default:               return 0.0;
+        case BmiType::Underweight: return ratios.underweight;
+        case BmiType::Normal: return ratios.normal;
+        case BmiType::Overweight: return ratios.overweight;
+        case BmiType::Obesity: return ratios.obesity;
+        default: return 0.0;
     }
 }
 
-// 개선된 인터페이스 (BmiType enum 사용)
-double SHealth::GetBmiRatio(int age_class, BmiType type) const
-{
-    return GetBmiRatio(age_class, static_cast<int>(type));
-}
-
-int SHealth::GetAgeBucket(int age) const
-{
-    // 연령대를 10년 단위로 구분
-    if (age < MIN_AGE_GROUP) return MIN_AGE_GROUP;
-    if (age >= MAX_AGE_GROUP + AGE_GROUP_SPAN) return MAX_AGE_GROUP;
-    return (age / AGE_GROUP_SPAN) * AGE_GROUP_SPAN;
-}
-
-void SHealth::ImputeMissingWeights()
-{
-    // 데이터 수집 중 누락된 체중에 나이대(ex. 20대, 30대, 40대 등)의 평균 체중을 적용
-    for (int ageGroup : AGE_GROUPS)
-    {
-        double sum = 0;
-        int age_count = 0;
-        
-        // 해당 연령대의 유효한 체중 데이터 수집
-        for (const auto& record : records) 
-        {
-            if (record.age >= ageGroup && record.age < ageGroup + AGE_GROUP_SPAN)
-            {
-                if (record.weight > 0.0) {
-                    sum += record.weight;
-                    age_count++;
-                }
-            }
-        }
-        
-        // 분모 0 방지 및 평균 체중으로 누락 데이터 보간
-        if (age_count > 0) {
-            double average_weight = sum / age_count;
-            for (auto& record : records) 
-            {
-                if (record.age >= ageGroup && record.age < ageGroup + AGE_GROUP_SPAN)
-                {
-                    if (record.weight == 0.0) {
-                        record.weight = average_weight;
-                    }
-                }
-            }
-        }
+double SHealthCore::GetBmiRatio(int age_class, int type) const {
+    switch (type) {
+        case TYPE_UNDERWEIGHT: return GetBmiRatio(age_class, BmiType::Underweight);
+        case TYPE_NORMAL: return GetBmiRatio(age_class, BmiType::Normal);
+        case TYPE_OVERWEIGHT: return GetBmiRatio(age_class, BmiType::Overweight);
+        case TYPE_OBESITY: return GetBmiRatio(age_class, BmiType::Obesity);
+        default: return 0.0;
     }
 }
 
-void SHealth::CalculateBmiValues()
-{
-    // BMI 계산하기
-    for (auto& record : records)
-    {
-        record.bmi = record.weight / ((record.height / 100.0) * (record.height / 100.0));
-    }
+// =============================================================================
+// SHealth 파사드 구현
+// =============================================================================
+
+SHealth::SHealth() 
+    : dataLoader(std::make_unique<CsvHealthDataLoader>()),
+      core(std::make_unique<SHealthCore>()) {
 }
 
-void SHealth::CalculateAgeGroupRatios()
-{
-    // 나이대(ex. 20대, 30대, 40대 등)의 BMI기준 저체중, 정상체중, 과체중, 비만 비율 계산
-    ageGroupRatios.clear();
-    
-    for (int ageGroup : AGE_GROUPS)
-    {
-        int underweight = 0;
-        int normalweight = 0;
-        int overweight = 0;
-        int obesity = 0;
-        int sum = 0;
-        
-        for (const auto& record : records)
-        {
-            if (record.age >= ageGroup && record.age < ageGroup + AGE_GROUP_SPAN)
-            {
-                sum++;
-                // 기존 로직 유지 (25.0은 어떤 카테고리에도 포함되지 않음)
-                if (record.bmi <= BMI_UNDERWEIGHT_THRESHOLD) underweight++;
-                else if (record.bmi < BMI_NORMAL_UPPER) normalweight++;
-                else if (record.bmi < BMI_OVERWEIGHT_UPPER) overweight++;
-                else if (record.bmi > BMI_OVERWEIGHT_UPPER) obesity++;
-            }
-        }
-        
-        // 비율 계산 및 저장
-        BmiRatios ratios;
-        if (sum > 0) {
-            ratios.underweight = (double)underweight * 100 / sum;
-            ratios.normal = (double)normalweight * 100 / sum;
-            ratios.overweight = (double)overweight * 100 / sum;
-            ratios.obesity = (double)obesity * 100 / sum;
-        }
-        // sum이 0인 경우 ratios는 기본값(0.0)으로 초기화됨
-        
-        ageGroupRatios[ageGroup] = ratios;
-    }
+SHealth::SHealth(std::unique_ptr<HealthDataLoader> loader,
+                 std::unique_ptr<SHealthCore> healthCore)
+    : dataLoader(std::move(loader)),
+      core(std::move(healthCore)) {
+}
+
+int SHealth::CalculateBmi(const std::string& filename) {
+    auto records = dataLoader->LoadHealthData(filename);
+    return ProcessHealthRecords(std::move(records));
+}
+
+int SHealth::CalculateBmi(std::istream& input) {
+    auto records = dataLoader->LoadHealthData(input);
+    return ProcessHealthRecords(std::move(records));
+}
+
+int SHealth::ProcessHealthRecords(std::vector<HealthRecord> records) {
+    core->ProcessHealthData(records);
+    return static_cast<int>(records.size());
+}
+
+double SHealth::GetBmiRatio(int age_class, int type) const {
+    return core->GetBmiRatio(age_class, type);
+}
+
+double SHealth::GetBmiRatio(int age_class, BmiType type) const {
+    return core->GetBmiRatio(age_class, type);
+}
+
+const std::map<int, BmiRatios>& SHealth::GetAgeGroupRatios() const {
+    return core->GetAgeGroupRatios();
 }

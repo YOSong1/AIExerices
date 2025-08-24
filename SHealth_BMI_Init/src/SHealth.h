@@ -5,6 +5,8 @@
 #include <vector>
 #include <map>
 #include <array>
+#include <memory>
+#include <istream>
 
 // BMI 분류 타입
 enum class BmiType {
@@ -39,21 +41,128 @@ struct HealthRecord {
     HealthRecord(int a, double w, double h) : age(a), weight(w), height(h), bmi(0.0) {}
 };
 
-class SHealth {
+// =============================================================================
+// 전략 인터페이스들 (Strategy Interfaces)
+// =============================================================================
+
+// 연령 버킷 계산 전략
+class AgeBucketer {
+public:
+    virtual ~AgeBucketer() = default;
+    virtual int GetAgeBucket(int age) const = 0;
+};
+
+// BMI 분류 전략
+class BmiClassifier {
+public:
+    virtual ~BmiClassifier() = default;
+    virtual BmiType ClassifyBmi(double bmi) const = 0;
+    virtual double CalculateBmi(double weight, double height) const = 0;
+};
+
+// 결측치 보간 전략
+class WeightImputer {
+public:
+    virtual ~WeightImputer() = default;
+    virtual void ImputeMissingWeights(std::vector<HealthRecord>& records, const AgeBucketer& bucketer) const = 0;
+};
+
+// 데이터 로더 인터페이스
+class HealthDataLoader {
+public:
+    virtual ~HealthDataLoader() = default;
+    virtual std::vector<HealthRecord> LoadHealthData(const std::string& source) const = 0;
+    virtual std::vector<HealthRecord> LoadHealthData(std::istream& input) const = 0;
+};
+
+// =============================================================================
+// 기본 구현체들 (Default Implementations)
+// =============================================================================
+
+class StandardAgeBucketer : public AgeBucketer {
+public:
+    int GetAgeBucket(int age) const override;
+};
+
+class StandardBmiClassifier : public BmiClassifier {
+public:
+    BmiType ClassifyBmi(double bmi) const override;
+    double CalculateBmi(double weight, double height) const override;
+};
+
+class AverageWeightImputer : public WeightImputer {
+public:
+    void ImputeMissingWeights(std::vector<HealthRecord>& records, const AgeBucketer& bucketer) const override;
+};
+
+class CsvHealthDataLoader : public HealthDataLoader {
+public:
+    std::vector<HealthRecord> LoadHealthData(const std::string& filename) const override;
+    std::vector<HealthRecord> LoadHealthData(std::istream& input) const override;
+};
+
+// =============================================================================
+// 핵심 계산 클래스 (Core Computation)
+// =============================================================================
+
+class SHealthCore {
 private:
-    std::vector<HealthRecord> records;
+    std::unique_ptr<AgeBucketer> ageBucketer;
+    std::unique_ptr<BmiClassifier> bmiClassifier;
+    std::unique_ptr<WeightImputer> weightImputer;
+    
     std::map<int, BmiRatios> ageGroupRatios;
 
-    // Helper functions
-    void ImputeMissingWeights();
-    void CalculateBmiValues();
-    void CalculateAgeGroupRatios();
-    int GetAgeBucket(int age) const;
+public:
+    // 생성자 - 기본 전략들 사용
+    SHealthCore();
+    
+    // 생성자 - 커스텀 전략들 주입
+    SHealthCore(std::unique_ptr<AgeBucketer> bucketer,
+                std::unique_ptr<BmiClassifier> classifier,
+                std::unique_ptr<WeightImputer> imputer);
+    
+    // 핵심 계산 메서드
+    void ProcessHealthData(std::vector<HealthRecord>& records);
+    double GetBmiRatio(int age_class, BmiType type) const;
+    double GetBmiRatio(int age_class, int type) const;  // 기존 호환성 유지
+    
+    // 테스트 지원 메서드
+    const std::map<int, BmiRatios>& GetAgeGroupRatios() const { return ageGroupRatios; }
+};
+
+// =============================================================================
+// 메인 파사드 클래스 (Main Facade)
+// =============================================================================
+
+class SHealth {
+private:
+    std::unique_ptr<HealthDataLoader> dataLoader;
+    std::unique_ptr<SHealthCore> core;
 
 public:
-    int CalculateBmi(std::string filename);
-    double GetBmiRatio(int age_class, int type) const;  // 기존 호환성 유지
-    double GetBmiRatio(int age_class, BmiType type) const;  // 개선된 인터페이스
+    // 생성자 - 기본 구현체들 사용
+    SHealth();
+    
+    // 생성자 - 커스텀 구현체들 주입
+    SHealth(std::unique_ptr<HealthDataLoader> loader,
+            std::unique_ptr<SHealthCore> healthCore);
+    
+    // 기존 API 호환성 유지
+    int CalculateBmi(const std::string& filename);
+    
+    // 새로운 스트림 기반 API
+    int CalculateBmi(std::istream& input);
+    
+    // 데이터 직접 주입 API (테스트 친화적)
+    int ProcessHealthRecords(std::vector<HealthRecord> records);
+    
+    // 결과 조회 API
+    double GetBmiRatio(int age_class, int type) const;
+    double GetBmiRatio(int age_class, BmiType type) const;
+    
+    // 테스트 지원 메서드
+    const std::map<int, BmiRatios>& GetAgeGroupRatios() const;
 };
 
 #endif
