@@ -1,0 +1,6 @@
+BMI Ratios for 30s (%)
+Underweight: 33.3
+Normal: 0.0
+Overweight: 33.3
+Obesity: 0.0
+
